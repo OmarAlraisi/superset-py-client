@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "superset-py-client"
+version = "0.1.0"
+description = ""
+authors = ["CanonicalLtd <jaas-dev@lists.launchpad.net>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+requests = "^2.32.3"
+pydantic = "^2.11.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
