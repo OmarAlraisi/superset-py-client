@@ -1,7 +1,8 @@
 """Superset Client."""
 import requests
-from typing import List, Optional
+from typing import List
 from supersetpyclient.models import User, Role
+import json
 
 
 class SupersetClient:
@@ -12,6 +13,13 @@ class SupersetClient:
             "Content-Type": "application/json",
             "Authorization": f"Bearer {access_token}"
         }
+
+    def _url_builder(self, endpoint: str, query_params: dict = None) -> str:
+        url = self.base_url
+        url += endpoint
+        if query_params is not None:
+            url += f"/?q={json.dumps(query_params)}"
+        return url
 
     def authenticate(self, username: str, password: str):
         reponse = requests.post(
@@ -61,7 +69,36 @@ class SupersetClient:
             )
         return roles
 
-    def _create_role_if_not_exist(self, role_name: str):
+    def _get_user(self, username: str):
+        query_params = {
+            "q": {
+                "filters": [
+                    {
+                        "col": "username",
+                        "opr": "eq",
+                        "value": username,
+                    }
+                ]
+            }
+        }
+        response = requests.get(
+            self._url_builder("/security/users", query_params),
+            headers=self.headers
+        )
+        result = response.json().get("result")
+        if len(result) == 0:
+            raise Exception("User does not exist!")
+
+        user = result[0]
+        return User(
+            username=username,
+            id=user.get("id"),
+            roles=[r.get("id") for r in user.get("roles")]
+        )
+
+    def _get_role_id(self, role_name: str):
+        """Return role ID and create a new role if it doesn't exist."""
+
         roles = self.get_roles()
         role = next((r for r in roles if r.name == role_name), None)
         if role is not None:
@@ -76,14 +113,8 @@ class SupersetClient:
         return response.json().get("id")
 
     def add_user_to_role(self, username: str, role_name: str):
-        # create role if not exists
-        role_id = self._create_role_if_not_exist(role_name)
-
-        # add user to role
-        users = self.get_users()
-        user = next((u for u in users if u.username == username), None)
-        if user is None:
-            raise Exception("Failed to add user to role. User does not exist")
+        role_id = self._get_role_id(role_name)
+        user = self._get_user(username)
 
         role_exists = next((r for r in user.roles if r == role_id), None)
         if role_exists is not None:
@@ -99,3 +130,18 @@ class SupersetClient:
             }
         )
         return response.json()
+
+    def remove_user_from_role(self, username: str, role_name: str):
+        user = self._get_user(username)
+        role_id = self._get_role_id(role_name)
+
+        user.roles.remove(role_id)
+        response = requests.put(
+            f"{self.base_url}/security/users/{user.id}",
+            headers=self.headers,
+            json={
+                "roles": user.roles,
+            }
+        )
+        return response.json()
+
